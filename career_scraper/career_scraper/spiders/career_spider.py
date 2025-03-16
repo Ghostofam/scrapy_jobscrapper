@@ -3,7 +3,6 @@ import gspread
 import dotenv
 import os
 import smtplib
-import sqlite3
 from oauth2client.service_account import ServiceAccountCredentials
 from scrapy_playwright.page import PageMethod
 from scrapy import signals
@@ -32,9 +31,7 @@ class CareerSpider(scrapy.Spider):
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name("jobs-data-452918-43b8a3d5d7c0.json", scope)
         self.client = gspread.authorize(creds)
-        self.sheet = self.client.open("Jobs Data") # Ensure spreadsheet exists
-        self.db_connection = sqlite3.connect("jobs")  # Connect to SQLite database
-        self.db_cursor = self.db_connection.cursor()
+        self.sheet = self.client.open("Jobs Data")  # Ensure spreadsheet exists
 
     def parse(self, response):
         """Extract third-party career page links."""
@@ -214,22 +211,7 @@ class CareerSpider(scrapy.Spider):
         except Exception as e:
             self.logger.error(f"Error while scraping Systems Ltd jobs: {e}")
 
-    def save_to_database(self, jobs):
-            """Save jobs to the SQLite database."""
-            try:
-                for job in jobs:
-                # Check if the job link already exists in the database
-                    self.db_cursor.execute("SELECT id FROM Jobs WHERE link = ?", (job[1],))
-                    if not self.db_cursor.fetchone():
-                    # Insert the job into the database
-                        self.db_cursor.execute("""
-                            INSERT INTO Jobs (title, link, source, country, cities)
-                            VALUES (?, ?, ?, ?, ?)
-                            """, (job[0], job[1], job[2], job[3], job[4]))
-                self.db_connection.commit()
-                self.logger.info(f"Successfully saved {len(jobs)} jobs to the database.")
-            except Exception as e:
-                self.logger.error(f"Error saving jobs to the database: {e}")
+
 
     def spider_closed(self, spider):
         """Upload scraped jobs to Google Sheets."""
@@ -286,7 +268,6 @@ class CareerSpider(scrapy.Spider):
 
             except Exception as e:
                 self.logger.error(f" Error saving data to {sheet_name} sheet: {e}")
-        
                 
         def send_email(self):
             """Send scraped job data via email."""
@@ -350,14 +331,8 @@ class CareerSpider(scrapy.Spider):
 
         save_to_sheet("Devsinc", self.jobs_devsinc,filter_test_jobs=True)
         save_to_sheet("Systems Ltd", self.jobs_systems,filter_test_jobs=True)
-        self.save_to_database(self.jobs_devsinc)
-        self.save_to_database(self.jobs_systems)
         self.logger.info("Sending email...")
         send_email(self)
         self.logger.info("Sent Email")
-        def __del__(self):
-            """Close the database connection when the spider is destroyed."""
-            if hasattr(self, "db_connection"):
-                self.db_connection.close()
-                self.logger.info("Database connection closed.")
+
         
